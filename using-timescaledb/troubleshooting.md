@@ -1,9 +1,40 @@
 # Troubleshooting
 
 If you run into problems when using TimescaleDB, there are a few things that you
-can do.  There are some solutions to common errors below as well as ways ot output
+can do.  There are some solutions to common errors below as well as ways to output
 diagnostic information about your setup.  If you need more guidance, you can join
-the support [slack group][slack] or post an issue on the TimescaleDB [github][].
+the support [Slack group][slack] or post an issue on the TimescaleDB [Github][].
+
+## Performance Best Practices
+
+### Inserting multiple metrics with the same timestamp
+
+Recommended pgtune. Turn of default indexes when setting up hypertable because higher cardinality. Device_id then time index. Matching timestamps. 
+
+### Queries that filter by id
+
+A common querying pattern involves selecting data across a time range and filtering by
+an identifier. We typically recommend users with this querying pattern to build an
+index on (id, timestamp) so that the query planner can filter by id efficiently.
+
+For users querying a lot of data over a large time range, disk I/O is an important
+factor that impacts query performance. Depending on how your data is written to disk
+during ingest, queries that involve filtering by id may inefficiently pull many
+pages from disk, ultimately slowing down performance.
+
+To speed up this type of query, we recommend either utilizing a covering index or taking
+advantage of PostgreSQL's built-in `CLUSTER` command [(PostgreSQL docs)][cluster-docs].
+A covering index is formatted as (id, timestamp, value), and thus allows fast queries
+filtered by id. However, it does require building another index that takes up disk space.
+The `CLUSTER` command, on the other hand, re-orders data written to disk by an index, thus
+making disk access more efficient for queries filtering by id. The `CLUSTER` command, however,
+takes a lock on a table. We recommend running the `CLUSTER` command one chunk at a time to reduce
+the amount of locking that occurs.
+
+### Storing and querying waveforms
+
+Waveforms are a common data type associated with IoT use cases. This typically involves raw data
+that is collected multiple times a second, but more often queried at an aggregated level.
 
 ## Common Errors
 ### Error updating TimescaleDB when using a third-party PostgreSQL admin tool.
@@ -85,10 +116,6 @@ can get even more information by enabling the
 [track\_io\_timing][track_io_timing] variable with `SET track_io_timing = 'on';`
 before running the above EXPLAIN.
 
-When asking query-performance related questions by
-email(<support@timescale.com>) or [slack][], providing the EXPLAIN output of a
-query is immensely helpful.
-
 ---
 
 ## Dump TimescaleDB meta data [](dump-meta-data)
@@ -112,3 +139,4 @@ and then inspect `dump_file.txt` before sending it together with a bug report or
 [using explain]: https://www.postgresql.org/docs/current/static/using-explain.html
 [track_io_timing]: https://www.postgresql.org/docs/current/static/runtime-config-statistics.html#GUC-TRACK-IO-TIMING
 [downloaded separately]: https://raw.githubusercontent.com/timescale/timescaledb/master/scripts/dump_meta_data.sql
+[cluster-docs]: https://www.postgresql.org/docs/current/static/sql-cluster.html
